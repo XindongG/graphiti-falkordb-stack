@@ -1,0 +1,154 @@
+name: agent-memory
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ---------------------------------------------------------------------------
+# Graphiti MCP image is published at:
+#   docker.io/xindongg/graphiti-falkordb-fast:0.28.2-anthropic
+# (multi-arch: linux/amd64, linux/arm64)
+#
+# It bundles graphiti-core 0.28.2 with three patches that fix slow / broken
+# fulltext search on FalkorDB. See PATCHES.md for details.
+# ---------------------------------------------------------------------------
+x-graphiti-common: &graphiti-common
+  image: xindongg/graphiti-falkordb-fast:0.28.2-anthropic
+  restart: unless-stopped
+  working_dir: /app/mcp
+  env_file:
+    - .env
+  depends_on:
+    falkordb:
+      condition: service_healthy
+  environment:
+    FALKORDB_URI: redis://falkordb:6379
+    FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+    FALKORDB_DATABASE: ${FALKORDB_DATABASE:-agent_memory}
+    SEMAPHORE_LIMIT: ${SEMAPHORE_LIMIT:-2}
+    FALKORDB_FULLTEXT_MAX_TERMS: ${FALKORDB_FULLTEXT_MAX_TERMS:-6}
+    CONFIG_PATH: /app/mcp/config/config.yaml
+    PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  volumes:
+    - ./config/graphiti-falkordb.yaml:/app/mcp/config/config.yaml:ro
+  command: ["/app/mcp/.venv/bin/python", "main.py"]
+  deploy:
+    resources:
+      limits:
+        cpus: "0.7"
+        memory: 768M
+      reservations:
+        cpus: "0.2"
+        memory: 256M
+  networks:
+    - agent-memory
+  logging: *default-logging
+
+services:
+  falkordb:
+    image: falkordb/falkordb-server:latest
+    container_name: agent-memory-falkordb
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 3G
+        reservations:
+          cpus: "1.5"
+          memory: 1G
+    expose:
+      - "6379"
+    environment:
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      REDIS_ARGS: --requirepass ${FALKORDB_PASSWORD} --appendonly yes --appendfsync everysec
+      # THREAD_COUNT 8: more graph workers than the 4-default to handle parallel
+      # search across the three graphiti instances.
+      # CACHE_SIZE 50: keep 50 prepared queries per graph in cache.
+      # TIMEOUT_DEFAULT 15s / TIMEOUT_MAX 30s: bound user-perceived wait so a
+      # bad query fails fast instead of holding the worker for minutes.
+      FALKORDB_ARGS: THREAD_COUNT 8 CACHE_SIZE 50 TIMEOUT_DEFAULT 15000 TIMEOUT_MAX 30000
+    volumes:
+      - ./data/falkordb-live:/var/lib/falkordb/data
+    networks:
+      - agent-memory
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli -a "$${FALKORDB_PASSWORD}" ping | grep -q PONG',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+
+  falkordb-browser:
+    image: falkordb/falkordb-browser:latest
+    container_name: agent-memory-falkordb-browser
+    restart: unless-stopped
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    ports:
+      - "${BIND_HOST}:8300:3000"
+    environment:
+      FALKORDB_URL: redis://falkordb:6379
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      ENCRYPTION_KEY: ${FALKORDB_BROWSER_ENCRYPTION_KEY}
+      API_TOKEN_STORAGE_PATH: /tmp/falkordb-browser/api_tokens.json
+    networks:
+      - agent-memory
+    logging: *default-logging
+
+  graphiti-flowmesh:
+    <<: *graphiti-common
+    container_name: agent-memory-graphiti-flowmesh
+    ports:
+      - "${BIND_HOST}:8001:8000"
+    environment:
+      FALKORDB_URI: redis://falkordb:6379
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      FALKORDB_DATABASE: flowmesh
+      GRAPHITI_GROUP_ID: flowmesh
+      SEMAPHORE_LIMIT: ${SEMAPHORE_LIMIT:-2}
+      FALKORDB_FULLTEXT_MAX_TERMS: ${FALKORDB_FULLTEXT_MAX_TERMS:-6}
+      CONFIG_PATH: /app/mcp/config/config.yaml
+      PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  graphiti-company:
+    <<: *graphiti-common
+    container_name: agent-memory-graphiti-company
+    ports:
+      - "${BIND_HOST}:8002:8000"
+    environment:
+      FALKORDB_URI: redis://falkordb:6379
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      FALKORDB_DATABASE: company_project
+      GRAPHITI_GROUP_ID: company_project
+      SEMAPHORE_LIMIT: ${SEMAPHORE_LIMIT:-2}
+      FALKORDB_FULLTEXT_MAX_TERMS: ${FALKORDB_FULLTEXT_MAX_TERMS:-6}
+      CONFIG_PATH: /app/mcp/config/config.yaml
+      PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  graphiti-personal-kb:
+    <<: *graphiti-common
+    container_name: agent-memory-graphiti-personal-kb
+    ports:
+      - "${BIND_HOST}:8003:8000"
+    environment:
+      FALKORDB_URI: redis://falkordb:6379
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD}
+      FALKORDB_DATABASE: personal_kb
+      GRAPHITI_GROUP_ID: personal_kb
+      SEMAPHORE_LIMIT: ${SEMAPHORE_LIMIT:-2}
+      FALKORDB_FULLTEXT_MAX_TERMS: ${FALKORDB_FULLTEXT_MAX_TERMS:-6}
+      CONFIG_PATH: /app/mcp/config/config.yaml
+      PATH: /root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+networks:
+  agent-memory:
+    driver: bridge

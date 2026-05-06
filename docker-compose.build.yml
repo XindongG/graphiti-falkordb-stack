@@ -1,0 +1,20 @@
+# Override file: build the graphiti image locally instead of pulling.
+#
+# Use this when you want to verify or modify the patches without depending
+# on the pre-built image on Docker Hub.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+
+x-graphiti-common-build: &graphiti-common-build
+  build:
+    context: ./docker/graphiti-ark
+
+services:
+  graphiti-flowmesh:
+    <<: *graphiti-common-build
+  graphiti-company:
+    <<: *graphiti-common-build
+  graphiti-personal-kb:
+    <<: *graphiti-common-build

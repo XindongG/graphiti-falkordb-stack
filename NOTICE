@@ -1,0 +1,11 @@
+graphiti-falkordb-stack
+Copyright 2026 Xindong
+
+This product contains modifications to graphiti-core (Apache-2.0,
+https://github.com/getzep/graphiti). The modifications are applied at
+container build time via the Python patch scripts in
+docker/graphiti-ark/, and are described in PATCHES.md.
+
+The unmodified upstream falkordb/falkordb-server and
+falkordb/falkordb-browser images are used as runtime dependencies and
+are not modified by this project.
