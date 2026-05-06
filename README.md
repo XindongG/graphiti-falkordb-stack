@@ -1,10 +1,14 @@
+<!-- markdownlint-disable MD041 -->
+
+**English** | [简体中文](README.zh-CN.md)
+
 # graphiti-falkordb-stack
 
 A drop-in MCP knowledge-graph stack:
 
 - **FalkorDB** as the graph store (Redis-protocol, persistent)
 - **3 isolated Graphiti instances** on ports 8001 / 8002 / 8003 (`flowmesh`,
-  `company`, `personal_kb` — pick names that fit your workflow)
+  `company_project`, `personal_kb` — pick names that fit your workflow)
 - **Patched `graphiti-core` 0.28.2** that fixes a 15-second timeout bug in
   upstream `edge_fulltext_search` on FalkorDB. See [PATCHES.md](PATCHES.md).
 
@@ -32,12 +36,12 @@ for p in 8001 8002 8003; do curl -s -w '%{http_code}\n' http://127.0.0.1:$p/heal
 
 ## What you get
 
-| Endpoint                | Service                                                |
-| ----------------------- | ------------------------------------------------------ |
-| `http://BIND_HOST:8001` | Graphiti MCP for the `flowmesh` graph                  |
-| `http://BIND_HOST:8002` | Graphiti MCP for the `company_project` graph           |
-| `http://BIND_HOST:8003` | Graphiti MCP for the `personal_kb` graph               |
-| `http://BIND_HOST:8300` | FalkorDB Browser web UI (optional, password-protected) |
+| Endpoint                | Service                                      |
+| ----------------------- | -------------------------------------------- |
+| `http://BIND_HOST:8001` | Graphiti MCP for the `flowmesh` graph        |
+| `http://BIND_HOST:8002` | Graphiti MCP for the `company_project` graph |
+| `http://BIND_HOST:8003` | Graphiti MCP for the `personal_kb` graph     |
+| `http://BIND_HOST:8300` | FalkorDB Browser web UI (optional)           |
 
 `BIND_HOST` defaults to `127.0.0.1` (local only). To expose on a private
 LAN or Tailscale interface, set `BIND_HOST` in `.env`.
@@ -71,11 +75,16 @@ For Claude Code, an example `~/.claude/settings.json` snippet:
 ## System requirements
 
 - Docker 24+ with the `compose` plugin (v2)
-- 4 cores / 8 GB RAM minimum (the FalkorDB container is allowed up to
-  3 cores / 3 GB, each Graphiti up to 0.7 cores / 768 MB)
+- 1 Docker CPU / 8 GB RAM minimum for a fresh local start. For production or
+  larger graphs, 4+ CPU cores are recommended.
+- Resource caps are configured in `.env`. Defaults are intentionally portable:
+  FalkorDB uses up to 1 CPU / 3 GB, and each Graphiti instance uses up to
+  0.7 CPU / 768 MB. Increase `FALKORDB_CPUS`, `GRAPHITI_CPUS`, and related
+  memory variables on larger hosts.
 - Outbound network access to your LLM and embedding API endpoints
 - Recommended: 8 GB swap and `vm.swappiness=10` (FalkorDB doesn't swap
   itself but other tenants on the box might OOM otherwise):
+
   ```bash
   fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   echo '/swapfile none swap sw 0 0' >> /etc/fstab

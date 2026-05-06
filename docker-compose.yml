@@ -37,11 +37,11 @@ x-graphiti-common: &graphiti-common
   deploy:
     resources:
       limits:
-        cpus: "0.7"
-        memory: 768M
+        cpus: ${GRAPHITI_CPUS:-0.7}
+        memory: ${GRAPHITI_MEMORY:-768M}
       reservations:
-        cpus: "0.2"
-        memory: 256M
+        cpus: ${GRAPHITI_RESERVED_CPUS:-0.2}
+        memory: ${GRAPHITI_RESERVED_MEMORY:-256M}
   networks:
     - agent-memory
   logging: *default-logging
@@ -54,11 +54,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "3.0"
-          memory: 3G
+          cpus: ${FALKORDB_CPUS:-1.0}
+          memory: ${FALKORDB_MEMORY:-3G}
         reservations:
-          cpus: "1.5"
-          memory: 1G
+          cpus: ${FALKORDB_RESERVED_CPUS:-0.5}
+          memory: ${FALKORDB_RESERVED_MEMORY:-1G}
     expose:
       - "6379"
     environment:
